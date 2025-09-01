@@ -11,6 +11,7 @@ from data.models import init_db
 from features.subscriptions import SubscriptionsService
 from features.alerts import AlertsService
 from features.cta import CTAService
+from features.scoring import heuristic_score
 
 
 async def create_app() -> Dispatcher:
@@ -64,6 +65,24 @@ async def create_app() -> Dispatcher:
             return
         ok = await subs.delete_subscription(user_id=message.from_user.id, sub_id=sid)
         await message.answer("Deleted" if ok else "Not found")
+
+    @dp.message(Command("alert_test"))
+    async def on_alert_test(message: Message) -> None:
+        args = (message.text or "").split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("Usage: /alert_test <domain>")
+            return
+        domain = args[1].strip()
+        score = heuristic_score(domain)
+        link = await cta.build_cta_link(domain)
+        text = alerts.format_alert(
+            title=f"Alert: {domain}",
+            lines=[
+                f"Score: {score}",
+                f"CTA: {link}",
+            ],
+        )
+        await message.answer(text)
 
     return bot, dp
 
