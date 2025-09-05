@@ -49,29 +49,38 @@ class Poller:
             try:
                 events = await self.client.get_events(kind=kind, limit=20)
                 sent = 0
+                last_id: int | None = None
                 for ev in events:
-                    ev_id = str(ev.get("id"))
-                    domain = str(ev.get("domain", ""))
-                    if not ev_id or not domain:
+                    # Poll API shape
+                    ev_id_num = ev.get("id")
+                    ev_unique = str(ev.get("uniqueId"))
+                    ev_type = str(ev.get("type", ""))
+                    domain = str(ev.get("name", ""))
+                    if ev_id_num is not None:
+                        try:
+                            last_id = int(ev_id_num)
+                        except Exception:
+                            pass
+                    if not ev_unique or not domain:
                         continue
-                    # dedupe
-                    if await self.alerts.was_delivered(ev_id):
+                    # dedupe on uniqueId per docs
+                    if await self.alerts.was_delivered(ev_unique):
                         continue
                     score = heuristic_score(domain)
                     cta = f"https://start.doma.xyz/?domain={domain}"
                     text = self.alerts.format_alert(
-                        title=f"{kind.title()} — {domain}",
+                        title=f"{ev_type} — {domain}",
                         lines=[
                             f"Score: {score}",
-                            f"Event ID: {ev_id}",
+                            f"UniqueID: {ev_unique}",
                             f"CTA: {cta}",
                         ],
                     )
-                    # fan-out: naive mapping by event kind substring in filter_text
+                    # fan-out: naive mapping by event type substring in filter_text
                     recipients = await self.subs.list_all()
-                    matched_users = {s.user_id for s in recipients if kind in (s.filter_text or "")}
+                    matched_users = {s.user_id for s in recipients if ev_type in (s.filter_text or "")}
                     if not matched_users:
-                        logger.debug("No matching subscribers for kind=%s", kind)
+                        logger.debug("No matching subscribers for type=%s", ev_type)
                     if settings.alerts_dry_run:
                         logger.info("[DRY-RUN] Would send to %s: %s", list(matched_users), text.replace("\n", " | "))
                     else:
@@ -81,8 +90,13 @@ class Poller:
                             except Exception:
                                 logger.exception("Failed to send to user_id=%s", uid)
                         logger.info("Sent alert to %d users", len(matched_users))
-                    await self.alerts.mark_delivered(ev_id)
+                    await self.alerts.mark_delivered(ev_unique)
                     sent += 1
+                # acknowledge last event id to receive next page
+                if last_id is not None:
+                    ok = await self.client.ack_events(last_id)
+                    if not ok:
+                        logger.warning("Failed to ack lastId=%s", last_id)
                 if sent:
                     logger.info("Poller cycle: processed=%d sent=%d", len(events), sent)
             except Exception as e:
