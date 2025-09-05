@@ -33,7 +33,14 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
 
     @dp.message(Command("help"))
     async def on_help(message: Message) -> None:
-        await message.answer("Commands:\n/sub_add <filter>\n/sub_list\n/sub_del <id>\n/alert_test <domain>")
+        await message.answer(
+            "Commands:\n"
+            "/sub_add <filter>\n"
+            "/sub_list\n"
+            "/sub_del <id>\n"
+            "/alert_test <domain>\n"
+            "/cta_order <domain> <price>"
+        )
 
     @dp.message(Command("sub_add"))
     async def on_sub_add(message: Message) -> None:
@@ -76,6 +83,34 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             return
         domain = args[1].strip()
         score = heuristic_score(domain)
+        link = await cta.build_cta_link(domain)
+        text = alerts.format_alert(
+            title=f"Alert: {domain}",
+            lines=[
+                f"Score: {score}",
+                f"CTA: {link}",
+            ],
+        )
+        await message.answer(text)
+
+
+    @dp.message(Command("cta_order"))
+    async def on_cta_order(message: Message) -> None:
+        args = (message.text or "").split()
+        if len(args) < 3:
+            await message.answer("Usage: /cta_order <domain> <price>")
+            return
+        domain = args[1].strip()
+        price = args[2].strip()
+        try:
+            res = await cta.place_order_sample(domain, price)
+            if res.get("ok"):
+                await message.answer(f"Order placed: {res}")
+            else:
+                await message.answer(f"Order failed: {res}")
+        except Exception as e:
+            await message.answer(f"Error: {e}")
+
         link = await cta.build_cta_link(domain)
         text = alerts.format_alert(
             title=f"Alert: {domain}",

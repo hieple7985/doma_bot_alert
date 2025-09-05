@@ -4,6 +4,7 @@ import asyncio
 import random
 from typing import Any, Dict, List, Optional
 import httpx
+import backoff
 
 from infra.config import settings
 
@@ -15,6 +16,19 @@ class DomaClient:
 
     async def close(self) -> None:
         await self._client.aclose()
+
+    # Backoff-enabled HTTP helpers (used when not simulating)
+    @backoff.on_exception(backoff.expo, httpx.HTTPError, max_tries=3)
+    async def _get(self, url: str, params: Optional[Dict[str, Any]] = None) -> httpx.Response:
+        r = await self._client.get(url, params=params)
+        r.raise_for_status()
+        return r
+
+    @backoff.on_exception(backoff.expo, httpx.HTTPError, max_tries=3)
+    async def _post(self, url: str, json: Optional[Dict[str, Any]] = None) -> httpx.Response:
+        r = await self._client.post(url, json=json)
+        r.raise_for_status()
+        return r
 
     async def get_events(self, kind: str, limit: int = 20) -> List[Dict[str, Any]]:
         """Fetch recent events.
@@ -38,8 +52,7 @@ class DomaClient:
         url = f"{self.base_url}/events"
         params = {"kind": kind, "limit": limit}
         try:
-            r = await self._client.get(url, params=params)
-            r.raise_for_status()
+            r = await self._get(url, params=params)
             data = r.json()
             # Expect list of events
             return data if isinstance(data, list) else []
@@ -51,8 +64,7 @@ class DomaClient:
             return {"domain": domain, "state": "simulated"}
         url = f"{self.base_url}/domains/{domain}"
         try:
-            r = await self._client.get(url)
-            r.raise_for_status()
+            r = await self._get(url)
             return r.json()
         except httpx.HTTPError:
             return {"domain": domain, "state": "error"}
@@ -63,8 +75,7 @@ class DomaClient:
         url = f"{self.base_url}/orders"
         payload = {"domain": domain, "price": price}
         try:
-            r = await self._client.post(url, json=payload)
-            r.raise_for_status()
+            r = await self._post(url, json=payload)
             return r.json()
         except httpx.HTTPError as e:
             return {"ok": False, "error": str(e)}
