@@ -31,8 +31,22 @@ python main.py
 - /sub_add <filter>
 - /sub_list
 - /sub_del <id>
+- /alert_test <domain>
+
+## D2: Background Poller (Simulation mode)
+- A background poller fetches events (kind from `DOMA_EVENT_KIND`) every `POLL_INTERVAL_SECONDS`.
+- Simulation can be toggled via `DOMA_SIMULATE=true|false`. When true, events are randomly generated.
+- Delivered events are deduped using `delivered_alerts` table.
+
+Env keys:
+```
+POLL_INTERVAL_SECONDS=15
+DOMA_EVENT_KIND=expiring
+DOMA_SIMULATE=true
+```
 
 ## Notes
 - Doma client is stubbed; replace endpoints in `doma/client.py` when available.
 - CTA link is placeholder; update to proper Doma testnet route.
 - DB file: `./bot.db` in working directory.
+- Security: never commit real tokens/keys; keep them in `.env`.

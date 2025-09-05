@@ -5,6 +5,7 @@ from typing import List
 from data.models import add_subscription as db_add_subscription
 from data.models import list_subscriptions as db_list_subscriptions
 from data.models import delete_subscription as db_delete_subscription, Subscription
+from data.models import list_all_subscriptions as db_list_all
 
 
 class SubscriptionsService:
@@ -19,3 +20,6 @@ class SubscriptionsService:
 
     async def delete_subscription(self, user_id: int, sub_id: int) -> bool:
         return await db_delete_subscription(user_id=user_id, sub_id=sub_id)
+
+    async def list_all(self) -> List[Subscription]:
+        return await db_list_all()

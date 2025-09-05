@@ -12,9 +12,10 @@ from features.subscriptions import SubscriptionsService
 from features.alerts import AlertsService
 from features.cta import CTAService
 from features.scoring import heuristic_score
+from features.poller import Poller
 
 
-async def create_app() -> Dispatcher:
+async def create_app() -> tuple[Bot, Dispatcher, Poller]:
     setup_logging(debug=settings.debug)
     await init_db(settings.database_url)
 
@@ -24,6 +25,7 @@ async def create_app() -> Dispatcher:
     subs = SubscriptionsService(settings.database_url)
     alerts = AlertsService()
     cta = CTAService()
+    poller = Poller(bot=bot, alerts=alerts)
 
     @dp.message(CommandStart())
     async def on_start(message: Message) -> None:
@@ -31,7 +33,7 @@ async def create_app() -> Dispatcher:
 
     @dp.message(Command("help"))
     async def on_help(message: Message) -> None:
-        await message.answer("Commands:\n/sub_add <filter>\n/sub_list\n/sub_del <id>")
+        await message.answer("Commands:\n/sub_add <filter>\n/sub_list\n/sub_del <id>\n/alert_test <domain>")
 
     @dp.message(Command("sub_add"))
     async def on_sub_add(message: Message) -> None:
@@ -84,14 +86,16 @@ async def create_app() -> Dispatcher:
         )
         await message.answer(text)
 
-    return bot, dp
+    return bot, dp, poller
 
 
 async def main() -> None:
-    bot, dp = await create_app()
+    bot, dp, poller = await create_app()
     try:
+        await poller.start()
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
     finally:
+        await poller.stop()
         await bot.session.close()
 
 

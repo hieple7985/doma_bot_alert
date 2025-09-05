@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 import asyncio
+import random
 from typing import Any, Dict, List, Optional
 import httpx
 
@@ -16,15 +17,54 @@ class DomaClient:
         await self._client.aclose()
 
     async def get_events(self, kind: str, limit: int = 20) -> List[Dict[str, Any]]:
-        # TODO: Replace with real endpoint once available
-        # Placeholder returns empty list to keep app runnable
-        return []
+        """Fetch recent events.
+
+        If settings.doma_simulate is True, returns simulated events for development.
+        Otherwise, performs a real HTTP GET to `${base_url}/events?kind=...&limit=...` (subject to real API shape).
+        """
+        if settings.doma_simulate:
+            # Simulate a small number of events with stable-ish IDs
+            sample = [
+                {
+                    "id": f"sim-{kind}-{i}-{random.randint(1000,9999)}",
+                    "kind": kind,
+                    "domain": f"demo{i}.tld",
+                    "ts": "2025-09-04T00:00:00Z",
+                }
+                for i in range(min(limit, 3))
+            ]
+            return sample
+        # Real call (adjust path/params to match Doma API once available)
+        url = f"{self.base_url}/events"
+        params = {"kind": kind, "limit": limit}
+        try:
+            r = await self._client.get(url, params=params)
+            r.raise_for_status()
+            data = r.json()
+            # Expect list of events
+            return data if isinstance(data, list) else []
+        except httpx.HTTPError:
+            return []
 
     async def get_domain_state(self, domain: str) -> Dict[str, Any]:
-        # TODO: Replace with real endpoint once available
-        return {"domain": domain, "state": "unknown"}
+        if settings.doma_simulate:
+            return {"domain": domain, "state": "simulated"}
+        url = f"{self.base_url}/domains/{domain}"
+        try:
+            r = await self._client.get(url)
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError:
+            return {"domain": domain, "state": "error"}
 
     async def place_order(self, domain: str, price: str) -> Dict[str, Any]:
-        # TODO: Implement minimal write on testnet via proper API
-        # For now, simulate accepted order id
-        return {"ok": True, "order_id": f"sim-{domain}-{price}"}
+        if settings.doma_simulate:
+            return {"ok": True, "order_id": f"sim-{domain}-{price}"}
+        url = f"{self.base_url}/orders"
+        payload = {"domain": domain, "price": price}
+        try:
+            r = await self._client.post(url, json=payload)
+            r.raise_for_status()
+            return r.json()
+        except httpx.HTTPError as e:
+            return {"ok": False, "error": str(e)}
