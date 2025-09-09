@@ -32,3 +32,31 @@ class CTAService:
             "ok": False,
             "error": "Orderbook REST not integrated yet in MVP. Use CTA link to proceed in UI.",
         }
+
+
+    async def order_preview(self, domain: str, price: str, orderbook: str = "DOMA") -> dict:
+        """Prepare a human-friendly preview using Subgraph + Orderbook APIs.
+        Returns: { ok, domain, price, chainId, tokenAddress, currencies, fees, cta }
+        """
+        client = await self.ensure_client()
+        info = await client.get_name_info(domain)
+        if not info:
+            return {"ok": False, "error": "Name not found in Subgraph"}
+        tokens = info.get("tokens") or []
+        if not tokens:
+            return {"ok": False, "error": "No token found for name"}
+        token = tokens[0]
+        chain_id = (token.get("chain") or {}).get("networkId") or ""
+        contract_address = token.get("tokenAddress") or ""
+        currencies = await client.get_supported_currencies(chain_id, contract_address, orderbook)
+        fees = await client.get_orderbook_fees(orderbook, chain_id, contract_address)
+        return {
+            "ok": True,
+            "domain": domain,
+            "price": price,
+            "chainId": chain_id,
+            "tokenAddress": contract_address,
+            "currencies": currencies,
+            "fees": fees,
+            "cta": await self.build_cta_link(domain),
+        }

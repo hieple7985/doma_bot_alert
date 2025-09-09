@@ -123,6 +123,32 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
         )
         await message.answer(text)
 
+    @dp.message(Command("order_preview"))
+    async def on_order_preview(message: Message) -> None:
+        args = (message.text or "").split()
+        if len(args) < 3:
+            await message.answer("Usage: /order_preview <domain> <price>")
+            return
+        domain = args[1].strip()
+        price = args[2].strip()
+        try:
+            res = await cta.order_preview(domain, price)
+            if not res.get("ok"):
+                await message.answer(f"Preview failed: {res.get('error')}")
+                return
+            lines = [
+                f"Domain: {res['domain']}",
+                f"Price: {res['price']}",
+                f"Chain: {res['chainId']}",
+                f"Token: {res['tokenAddress']}",
+                f"Currencies: {', '.join([c.get('symbol','?') for c in res.get('currencies', [])]) or 'N/A'}",
+                f"Fees: {res.get('fees')}",
+                f"CTA: {res['cta']}",
+            ]
+            await message.answer("Order Preview:\n" + "\n".join(lines))
+        except Exception as e:
+            await message.answer(f"Error: {e}")
+
     @dp.message(Command("alert_stats"))
     async def on_alert_stats(message: Message) -> None:
         p = poller

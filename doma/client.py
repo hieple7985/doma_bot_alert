@@ -104,3 +104,54 @@ class DomaClient:
             return r.json()
         except httpx.HTTPError as e:
             return {"ok": False, "error": str(e)}
+
+    # ---------- Subgraph (GraphQL) and Orderbook helpers ----------
+    async def get_name_info(self, name: str) -> Dict[str, Any]:
+        """Fetch basic name info (expiresAt, registrar, tokens) from Subgraph GraphQL."""
+        if settings.doma_simulate:
+            return {
+                "name": name,
+                "expiresAt": "2025-12-31T00:00:00Z",
+                "tokens": [
+                    {
+                        "tokenId": "sim-token",
+                        "tokenAddress": "0x0000000000000000000000000000000000000000",
+                        "ownerAddress": "eip155:11155111:0x0000000000000000000000000000000000000000",
+                        "chain": {"networkId": "eip155:11155111"},
+                    }
+                ],
+            }
+        url = f"{self.base_url}/graphql"
+        query = (
+            "query($name: String!) { name(name: $name) { name expiresAt registrar { name ianaId } "
+            "tokens { tokenId tokenAddress ownerAddress chain { networkId } } } }"
+        )
+        try:
+            r = await self._post(url, json={"query": query, "variables": {"name": name}})
+            data = r.json() or {}
+            return (data.get("data", {}) or {}).get("name", {}) or {}
+        except httpx.HTTPError:
+            return {}
+
+    async def get_supported_currencies(self, chain_id: str, contract_address: str, orderbook: str = "DOMA") -> List[Any]:
+        if settings.doma_simulate:
+            return [{"symbol": "ETH"}, {"symbol": "USDC"}]
+        url = f"{self.base_url}/v1/orderbook/currencies/{chain_id}/{contract_address}/{orderbook}"
+        try:
+            r = await self._get(url)
+            data = r.json() or {}
+            return data.get("currencies", [])
+        except httpx.HTTPError:
+            return []
+
+    async def get_orderbook_fees(self, orderbook: str, chain_id: str, contract_address: str) -> List[Any]:
+        if settings.doma_simulate:
+            return [["DOMA_FEE", "0.5%"]]
+        url = f"{self.base_url}/v1/orderbook/fee/{orderbook}/{chain_id}/{contract_address}"
+        try:
+            r = await self._get(url)
+            data = r.json() or {}
+            return data.get("marketplaceFees", [])
+        except httpx.HTTPError:
+            return []
+
