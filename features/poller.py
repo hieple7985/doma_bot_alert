@@ -35,6 +35,8 @@ class Poller:
         self.last_cycle_processed = 0
         self.last_cycle_sent = 0
         # simple name info cache for enrichment
+        self._name_cache: dict[str, tuple[float, dict]] = {}
+        self._cache_ttl = 300  # seconds
 
     async def _get_name_info_cached(self, name: str) -> dict:
         now = time.time()
@@ -47,9 +49,6 @@ class Poller:
             info = {}
         self._name_cache[name] = (now, info or {})
         return info or {}
-
-        self._name_cache: dict[str, tuple[float, dict]] = {}
-        self._cache_ttl = 300  # seconds
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
