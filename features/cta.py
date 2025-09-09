@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Optional
 
 from doma.client import DomaClient
+from infra.config import settings
 
 
 class CTAService:
@@ -19,5 +20,15 @@ class CTAService:
         return f"https://start.doma.xyz/?domain={domain}"
 
     async def place_order_sample(self, domain: str, price: str) -> dict:
+        # Respect DRY-RUN: do not perform writes when in dry-run
+        if settings.alerts_dry_run:
+            return {"ok": True, "order_id": f"dryrun-{domain}-{price}"}
+        # If still in overall simulate mode, use simulated client behavior
         client = await self.ensure_client()
-        return await client.place_order(domain=domain, price=price)
+        if settings.doma_simulate:
+            return await client.place_order(domain=domain, price=price)
+        # Real write path not integrated yet (Orderbook REST). Keep UX by returning a friendly error.
+        return {
+            "ok": False,
+            "error": "Orderbook REST not integrated yet in MVP. Use CTA link to proceed in UI.",
+        }
