@@ -112,14 +112,16 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
         except Exception as e:
             await message.answer(f"Error: {e}")
 
+        score = heuristic_score(domain)
         link = await cta.build_cta_link(domain)
         text = alerts.format_alert(
-            title=f"Alert: {domain}",
+            title=f"CTA for {domain}",
             lines=[
                 f"Score: {score}",
                 f"CTA: {link}",
             ],
         )
+        await message.answer(text)
 
     @dp.message(Command("alert_stats"))
     async def on_alert_stats(message: Message) -> None:
