@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 from typing import Optional
+from typing import Dict, Tuple
 
 from aiogram import Bot
 
@@ -33,6 +34,22 @@ class Poller:
         self.last_cycle_latency = 0.0
         self.last_cycle_processed = 0
         self.last_cycle_sent = 0
+        # simple name info cache for enrichment
+
+    async def _get_name_info_cached(self, name: str) -> dict:
+        now = time.time()
+        ent = self._name_cache.get(name)
+        if ent and now - ent[0] < self._cache_ttl:
+            return ent[1]
+        try:
+            info = await self.client.get_name_info(name)
+        except Exception:
+            info = {}
+        self._name_cache[name] = (now, info or {})
+        return info or {}
+
+        self._name_cache: dict[str, tuple[float, dict]] = {}
+        self._cache_ttl = 300  # seconds
 
     async def start(self) -> None:
         if self._task is None or self._task.done():
@@ -81,13 +98,25 @@ class Poller:
                         continue
                     score = heuristic_score(domain)
                     cta = f"https://start.doma.xyz/?domain={domain}"
+                    # enrichment via Subgraph (best-effort)
+                    enrich = await self._get_name_info_cached(domain)
+                    expires = (enrich or {}).get("expiresAt")
+                    owner = None
+                    toks = (enrich or {}).get("tokens") or []
+                    if toks:
+                        owner = (toks[0] or {}).get("ownerAddress")
+                    lines = [
+                        f"Score: {score}",
+                        f"UniqueID: {ev_unique}",
+                    ]
+                    if expires:
+                        lines.append(f"ExpiresAt: {expires}")
+                    if owner:
+                        lines.append(f"Owner: {owner}")
+                    lines.append(f"CTA: {cta}")
                     text = self.alerts.format_alert(
                         title=f"{ev_type} — {domain}",
-                        lines=[
-                            f"Score: {score}",
-                            f"UniqueID: {ev_unique}",
-                            f"CTA: {cta}",
-                        ],
+                        lines=lines,
                     )
                     # fan-out: naive mapping by event type substring in filter_text
                     recipients = await self.subs.list_all()
