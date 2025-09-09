@@ -123,13 +123,23 @@ class DomaClient:
             }
         url = f"{self.base_url}/graphql"
         query = (
-            "query($name: String!) { name(name: $name) { name expiresAt registrar { name ianaId } "
-            "tokens { tokenId tokenAddress ownerAddress chain { networkId } } } }"
+            "query($name: String!) {"
+            "  name(name: $name) { name expiresAt registrar { name ianaId } tokens { tokenId tokenAddress ownerAddress chain { networkId } } }"
+            "  tokens(name: $name, take: 1) { items { tokenId tokenAddress ownerAddress chain { networkId } } }"
+            "}"
         )
         try:
             r = await self._post(url, json={"query": query, "variables": {"name": name}})
             data = r.json() or {}
-            return (data.get("data", {}) or {}).get("name", {}) or {}
+            d = (data.get("data", {}) or {})
+            name_obj = d.get("name") or {}
+            if name_obj:
+                return name_obj
+            # Fallback: synthesize from tokens list if name() is null
+            items = ((d.get("tokens") or {}).get("items") or [])
+            if items:
+                return {"name": name, "expiresAt": None, "tokens": items}
+            return {}
         except httpx.HTTPError:
             return {}
 
