@@ -3,8 +3,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from collections import deque
 from typing import Optional
-from typing import Dict, Tuple
 
 from aiogram import Bot
 
@@ -37,6 +37,8 @@ class Poller:
         # simple name info cache for enrichment
         self._name_cache: dict[str, tuple[float, dict]] = {}
         self._cache_ttl = 300  # seconds
+        # buffer recent domains for quick testing UX
+        self.recent_events = deque(maxlen=20)
 
     async def _get_name_info_cached(self, name: str) -> dict:
         now = time.time()
@@ -117,9 +119,23 @@ class Poller:
                         title=f"{ev_type} — {domain}",
                         lines=lines,
                     )
-                    # fan-out: naive mapping by event type substring in filter_text
+                    # fan-out: alias-aware matching (LISTED/PURCHASED)
                     recipients = await self.subs.list_all()
-                    matched_users = {s.user_id for s in recipients if ev_type in (s.filter_text or "")}
+                    alias = "PURCHASED" if "PURCHASED" in ev_type else ("LISTED" if "LISTED" in ev_type else ev_type)
+                    matched_users = set()
+                    for s in recipients:
+                        ft = (s.filter_text or "").upper()
+                        if ev_type in ft or alias in ft:
+                            matched_users.add(s.user_id)
+                    # push to recent buffer for UX
+                    try:
+                        self.recent_events.append({
+                            "type": ev_type,
+                            "name": domain,
+                            "uniqueId": ev_unique,
+                        })
+                    except Exception:
+                        pass
                     if not matched_users:
                         logger.debug("No matching subscribers for type=%s", ev_type)
                     if settings.alerts_dry_run:

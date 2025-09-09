@@ -42,6 +42,7 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             "/cta_order <domain> <price>\n"
             "/order_preview <domain> <price>\n"
             "/name_info <domain>\n"
+            "/recent\n"
             "/alert_stats"
         )
 
@@ -151,6 +152,20 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
                 lines.append(f"Note: {note}")
             lines.append(f"CTA: {res['cta']}")
             await message.answer("Order Preview:\n" + "\n".join(lines))
+        except Exception as e:
+            await message.answer(f"Error: {e}")
+
+
+    @dp.message(Command("recent"))
+    async def on_recent(message: Message) -> None:
+        items = list(poller.recent_events)
+        if not items:
+            await message.answer("No recent events yet. Please wait a few seconds…")
+            return
+        lines = []
+        for it in reversed(items):
+            lines.append(f"{it.get('type')} — {it.get('name')} ({it.get('uniqueId')[:8]})")
+        await message.answer("Recent events:\n" + "\n".join(lines))
 
     @dp.message(Command("name_info"))
     async def on_name_info(message: Message) -> None:
