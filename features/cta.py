@@ -41,10 +41,31 @@ class CTAService:
         client = await self.ensure_client()
         info = await client.get_name_info(domain)
         if not info:
-            return {"ok": False, "error": "Name not found in Subgraph"}
+            # Fallback: still return CTA so demo flow doesn't block
+            return {
+                "ok": True,
+                "domain": domain,
+                "price": price,
+                "chainId": "N/A",
+                "tokenAddress": "N/A",
+                "currencies": [],
+                "fees": [],
+                "note": "Subgraph has no data for this name on testnet",
+                "cta": await self.build_cta_link(domain),
+            }
         tokens = info.get("tokens") or []
         if not tokens:
-            return {"ok": False, "error": "No token found for name"}
+            return {
+                "ok": True,
+                "domain": domain,
+                "price": price,
+                "chainId": "N/A",
+                "tokenAddress": "N/A",
+                "currencies": [],
+                "fees": [],
+                "note": "No token found for this name in Subgraph",
+                "cta": await self.build_cta_link(domain),
+            }
         token = tokens[0]
         chain_id = (token.get("chain") or {}).get("networkId") or ""
         contract_address = token.get("tokenAddress") or ""
@@ -54,8 +75,8 @@ class CTAService:
             "ok": True,
             "domain": domain,
             "price": price,
-            "chainId": chain_id,
-            "tokenAddress": contract_address,
+            "chainId": chain_id or "N/A",
+            "tokenAddress": contract_address or "N/A",
             "currencies": currencies,
             "fees": fees,
             "cta": await self.build_cta_link(domain),

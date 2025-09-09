@@ -139,12 +139,15 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             lines = [
                 f"Domain: {res['domain']}",
                 f"Price: {res['price']}",
-                f"Chain: {res['chainId']}",
-                f"Token: {res['tokenAddress']}",
+                f"Chain: {res.get('chainId','N/A')}",
+                f"Token: {res.get('tokenAddress','N/A')}",
                 f"Currencies: {', '.join([c.get('symbol','?') for c in res.get('currencies', [])]) or 'N/A'}",
                 f"Fees: {res.get('fees')}",
-                f"CTA: {res['cta']}",
             ]
+            note = res.get('note')
+            if note:
+                lines.append(f"Note: {note}")
+            lines.append(f"CTA: {res['cta']}")
             await message.answer("Order Preview:\n" + "\n".join(lines))
         except Exception as e:
             await message.answer(f"Error: {e}")
