@@ -40,7 +40,7 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             "/sub_del <id>\n"
             "/alert_test <domain>\n"
             "/cta_order <domain> <price>\n"
-            "/order_preview <domain> <price>\n"
+            "/order_preview <domain> <price> [currencySymbol] [orderbook]\n"
             "/name_info <domain>\n"
             "/recent\n"
             "/alert_stats"
@@ -130,22 +130,40 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
     async def on_order_preview(message: Message) -> None:
         args = (message.text or "").split()
         if len(args) < 3:
-            await message.answer("Usage: /order_preview <domain> <price>")
+            await message.answer("Usage: /order_preview <domain> <price> [currencySymbol] [orderbook]")
             return
         domain = args[1].strip()
         price = args[2].strip()
+        currency = args[3].strip() if len(args) >= 4 else None
+        ob = args[4].strip().upper() if len(args) >= 5 else "DOMA"
         try:
-            res = await cta.order_preview(domain, price)
+            res = await cta.order_preview(domain, price, currency_symbol=currency, orderbook=ob)
             if not res.get("ok"):
                 await message.answer(f"Preview failed: {res.get('error')}")
                 return
+            def short(addr: str) -> str:
+                if not addr or len(addr) < 10:
+                    return addr or ""
+                return addr[:6] + "…" + addr[-4:]
+            currencies = res.get('currencies', [])
+            cur_list = ', '.join(sorted({(c.get('symbol') or '?') for c in currencies})) or 'N/A'
+            sel = res.get('selectedCurrency')
+            sel_str = f" (selected: {sel.get('symbol')})" if sel else ""
+            fees = res.get('fees') or []
+            fee_strs = []
+            for f in fees:
+                bps = f.get('basisPoints')
+                pct = f"{(bps or 0)/100:.2f}%"
+                r = f.get('recipient')
+                t = f.get('feeType') or 'Fee'
+                fee_strs.append(f"{t}: {pct} ({short(r)})")
             lines = [
                 f"Domain: {res['domain']}",
                 f"Price: {res['price']}",
                 f"Chain: {res.get('chainId','N/A')}",
-                f"Token: {res.get('tokenAddress','N/A')}",
-                f"Currencies: {', '.join([c.get('symbol','?') for c in res.get('currencies', [])]) or 'N/A'}",
-                f"Fees: {res.get('fees')}",
+                f"Token: {short(res.get('tokenAddress','N/A'))}",
+                f"Currencies: {cur_list}{sel_str}",
+                f"Fees: {', '.join(fee_strs) if fee_strs else 'N/A'}",
             ]
             note = res.get('note')
             if note:

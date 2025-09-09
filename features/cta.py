@@ -34,9 +34,15 @@ class CTAService:
         }
 
 
-    async def order_preview(self, domain: str, price: str, orderbook: str = "DOMA") -> dict:
+    async def order_preview(
+        self,
+        domain: str,
+        price: str,
+        currency_symbol: Optional[str] = None,
+        orderbook: str = "DOMA",
+    ) -> dict:
         """Prepare a human-friendly preview using Subgraph + Orderbook APIs.
-        Returns: { ok, domain, price, chainId, tokenAddress, currencies, fees, cta }
+        Returns: { ok, domain, price, chainId, tokenAddress, currencies, selectedCurrency, fees, cta }
         """
         client = await self.ensure_client()
         info = await client.get_name_info(domain)
@@ -71,6 +77,13 @@ class CTAService:
         contract_address = token.get("tokenAddress") or ""
         currencies = await client.get_supported_currencies(chain_id, contract_address, orderbook)
         fees = await client.get_orderbook_fees(orderbook, chain_id, contract_address)
+        selected = None
+        if currency_symbol and currencies:
+            sym = currency_symbol.upper()
+            for c in currencies:
+                if (c.get("symbol") or "").upper() == sym:
+                    selected = c
+                    break
         return {
             "ok": True,
             "domain": domain,
@@ -78,6 +91,7 @@ class CTAService:
             "chainId": chain_id or "N/A",
             "tokenAddress": contract_address or "N/A",
             "currencies": currencies,
+            "selectedCurrency": selected,
             "fees": fees,
             "cta": await self.build_cta_link(domain),
         }
