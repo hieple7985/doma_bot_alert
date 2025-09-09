@@ -40,6 +40,8 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             "/sub_del <id>\n"
             "/alert_test <domain>\n"
             "/cta_order <domain> <price>\n"
+            "/order_preview <domain> <price>\n"
+            "/name_info <domain>\n"
             "/alert_stats"
         )
 
@@ -149,6 +151,31 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
                 lines.append(f"Note: {note}")
             lines.append(f"CTA: {res['cta']}")
             await message.answer("Order Preview:\n" + "\n".join(lines))
+
+    @dp.message(Command("name_info"))
+    async def on_name_info(message: Message) -> None:
+        args = (message.text or "").split(maxsplit=1)
+        if len(args) < 2:
+            await message.answer("Usage: /name_info <domain>")
+            return
+        domain = args[1].strip()
+        try:
+            info = await poller.client.get_name_info(domain)
+            if not info:
+                await message.answer("No Subgraph data for this name (testnet)")
+                return
+            # Compact view
+            tokens = info.get("tokens") or []
+            first = tokens[0] if tokens else {}
+            lines = [
+                f"Name: {info.get('name') or domain}",
+                f"ExpiresAt: {info.get('expiresAt')}",
+                f"Registrar: {(info.get('registrar') or {}).get('name')}",
+                f"Token: {first.get('tokenAddress')}",
+                f"Owner: {first.get('ownerAddress')}",
+                f"Chain: {(first.get('chain') or {}).get('networkId')}",
+            ]
+            await message.answer("Name Info:\n" + "\n".join(lines))
         except Exception as e:
             await message.answer(f"Error: {e}")
 
