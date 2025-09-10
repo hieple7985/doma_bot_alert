@@ -1,0 +1,28 @@
+services:
+  - type: worker
+    name: doma-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python main.py
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DATABASE_URL
+        value: sqlite:///./bot.db
+      - key: DOMA_BASE_URL
+        value: https://api-testnet.doma.xyz
+      - key: DOMA_API_KEY
+        sync: false
+      - key: DOMA_API_HEADER
+        value: Api-Key
+      - key: DOMA_EVENT_TYPES
+        value: NAME_TOKEN_LISTED,NAME_TOKEN_PURCHASED
+      - key: DOMA_FINALIZED_ONLY
+        value: "true"
+      - key: DOMA_SIMULATE
+        value: "false"
+      - key: ALERTS_DRY_RUN
+        value: "false"
+      - key: POLL_INTERVAL_SECONDS
+        value: "15"
+
