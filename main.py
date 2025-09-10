@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+import os
 import asyncio
 import logging
 from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
+from aiohttp import web
 
 from infra.config import settings
 from infra.logging import setup_logging
@@ -233,6 +235,27 @@ async def main() -> None:
         await poller.stop()
         await bot.session.close()
 
+# Optional: expose a small health endpoint so Render Web Service stays green
+async def _health(request: web.Request) -> web.Response:
+    return web.Response(text="ok")
+
+async def run_web_and_bot() -> None:
+    # Start bot in background
+    bot_task = asyncio.create_task(main())
+    # Start aiohttp web server for health check
+    app = web.Application()
+    app.add_routes([web.get("/healthz", _health), web.get("/", _health)])
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+    # Keep running until bot task finishes (or cancelled by platform)
+    await bot_task
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # If running as Web Service on Render, they set $PORT.
+    if os.getenv("PORT"):
+        asyncio.run(run_web_and_bot())
+    else:
+        asyncio.run(main())
