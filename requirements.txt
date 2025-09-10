@@ -5,3 +5,5 @@ aiosqlite==0.20.0
 python-dotenv==1.0.1
 pydantic==2.8.2
 backoff==2.2.1
+
+greenlet>=3.0.3
