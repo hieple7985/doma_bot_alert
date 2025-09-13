@@ -25,4 +25,9 @@ class Settings:
     doma_event_types: str = os.getenv("DOMA_EVENT_TYPES", "NAME_TOKEN_LISTED")
     doma_finalized_only: bool = os.getenv("DOMA_FINALIZED_ONLY", "true").lower() in {"1", "true", "yes"}
 
+    # Webhook settings (optional)
+    tg_webhook_base: str = os.getenv("TG_WEBHOOK_BASE", "")  # e.g., https://doma-bot-alert.onrender.com
+    tg_webhook_path: str = os.getenv("TG_WEBHOOK_PATH", "tg-webhook")
+    tg_webhook_secret: str = os.getenv("TG_WEBHOOK_SECRET", "")
+
 settings = Settings()

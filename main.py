@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
 from aiohttp import web
+from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 
 from infra.config import settings
 from infra.logging import setup_logging
@@ -223,6 +224,53 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             f"last_ack_id={p.last_ack_id} last_cycle_processed={p.last_cycle_processed} last_cycle_sent={p.last_cycle_sent} latency={p.last_cycle_latency:.3f}s"
         )
 
+
+async def run_webhook_and_poller() -> None:
+    # Build app components
+    bot, dp, poller = await create_app()
+
+    # Start poller in background
+    poller_task = asyncio.create_task(poller.start())
+
+    # Configure webhook routing
+    app = web.Application()
+    setup_application(app, dp, bot=bot)
+
+    secret = settings.tg_webhook_secret
+    path = settings.tg_webhook_path.strip("/")
+    if not path:
+        path = "tg-webhook"
+    if secret:
+        hook_path = f"/{path}/{secret}"
+    else:
+        hook_path = f"/{path}"
+
+    SimpleRequestHandler(dispatcher=dp, bot=bot).register(app, path=hook_path)
+
+    # Register health endpoints
+    app.add_routes([web.get("/healthz", _health), web.get("/", _health)])
+
+    # Start web server
+    runner = web.AppRunner(app)
+    await runner.setup()
+    port = int(os.getenv("PORT", "10000"))
+    site = web.TCPSite(runner, "0.0.0.0", port)
+    await site.start()
+
+    # Set Telegram webhook
+    base = settings.tg_webhook_base.rstrip("/")
+    if base:
+        await bot.set_webhook(url=f"{base}{hook_path}")
+
+    # Keep running
+    try:
+        while True:
+            await asyncio.sleep(3600)
+    finally:
+        await bot.delete_webhook(drop_pending_updates=False)
+        await poller.stop()
+        await bot.session.close()
+
     return bot, dp, poller
 
 
@@ -240,9 +288,8 @@ async def _health(request: web.Request) -> web.Response:
     return web.Response(text="ok")
 
 async def run_web_and_bot() -> None:
-    # Start bot in background
+    # Start bot in background (polling mode) and expose healthz
     bot_task = asyncio.create_task(main())
-    # Start aiohttp web server for health check
     app = web.Application()
     app.add_routes([web.get("/healthz", _health), web.get("/", _health)])
     runner = web.AppRunner(app)
@@ -250,12 +297,15 @@ async def run_web_and_bot() -> None:
     port = int(os.getenv("PORT", "10000"))
     site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    # Keep running until bot task finishes (or cancelled by platform)
     await bot_task
 
 if __name__ == "__main__":
-    # If running as Web Service on Render, they set $PORT.
+    # Web Service mode: if PORT is set, decide webhook vs. polling
     if os.getenv("PORT"):
-        asyncio.run(run_web_and_bot())
+        if settings.tg_webhook_base:
+            asyncio.run(run_webhook_and_poller())
+        else:
+            asyncio.run(run_web_and_bot())
     else:
+        # Local / worker mode: polling
         asyncio.run(main())
