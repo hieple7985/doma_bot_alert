@@ -224,6 +224,8 @@ async def create_app() -> tuple[Bot, Dispatcher, Poller]:
             f"last_ack_id={p.last_ack_id} last_cycle_processed={p.last_cycle_processed} last_cycle_sent={p.last_cycle_sent} latency={p.last_cycle_latency:.3f}s"
         )
 
+    return bot, dp, poller
+
 
 async def run_webhook_and_poller() -> None:
     # Build app components
